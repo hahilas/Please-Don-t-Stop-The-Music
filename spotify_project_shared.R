@@ -31,6 +31,7 @@ spotify2<- spotify1%>%select(-energy, -sections)
 dim(spotify2)
 View(spotify2)
 
+##VALIDATION WORKINGS##
 ## 50% of the sample size
 #sample_size <- floor(0.50 * nrow(spotify2))
 
@@ -44,6 +45,7 @@ View(spotify2)
 # train<-sample(c(TRUE,FALSE),nrow(spotify2), rep=TRUE)
 # test<- (!train)
 
+##METHOD 1: LASSO 
 trainp <- sample(1:nrow(spotify2),nrow(spotify2)/2)
 testp <- -trainp
 
@@ -86,30 +88,56 @@ out.rr <- glmnet(x,y, alpha=0, lambda=grid, family="binomial")
 rr.coef <- predict(out.rr, type="coefficients", s=lambda.rr)[1:14,]
 rr.coef
 
+#METHOD 2: RUNNING BEST SUBSET LOGISTIC REGRESSION ON TRAIN DATASET
+library(bestglm)
+spotifyglm1 <- bestglm(Xy = train, family = binomial, IC = "CV", CVArgs = list(Method = "DH", K =10,REP = 1))
+
+#METHOD 3: RUNNING BEST SUBSET LOGISTIC REGRESSION ON WHOLE DATA SET TO DETERMINE BEST INDEPENDENT VARIABLES
 #To run logistic regression with subset selection
 library(bestglm)
-
 ## Perform
 spotifyglm <-
-  bestglm(Xy = train,
+  bestglm(Xy = spotify2,
           family = binomial,          # binomial family for logistic
           IC = "BIC",                 # Information criteria for
           method = "exhaustive",nvmax=13)
 
-spotifyglm$Subsets
-#summary(spotifyglm$BestModel)
-spotifyglm1 <- bestglm(Xy = train, family = binomial, IC = "CV", CVArgs = list(Method = "DH", K =10,REP = 1))
+spotifyglm$BestModels
+summary(spotifyglm$BestModel)
 
+#WITH THAT, USE THE BEST INDEPENDENT VARIABLE TO BUILD A NORMAL LOGISTIC REGRESSION MODEL
 #Perform normal logistic regression with selected independent variables
 
 spotify3<-spotify2%>%select(danceability, loudness, instrumentalness, liveness, valence, duration_ms,time_signature, target)
 View(spotify3)
-data<-data.frame(spotify3)
-spotifyglm1<-glm(target~.,
-             data=data ,family =binomial )
-summary(spotifyglm1)
+#data<-data.frame(spotify3)
+spotifyglm2<-glm(target~.,
+             data=spotify3 ,family =binomial )
+summary(spotifyglm2)
+
+#this codes to help in splitting data
+install.packages('caTools')
+library(caTools)
+
+set.seed(88)
+split <- sample.split(spotify3$target, SplitRatio = 0.50)
+
+#get training and test data
+spotify3train <- subset(spotify3, split == TRUE)
+spotify3test <- subset(spotify3, split == FALSE)
+
+predict <- predict(spotifyglm2, type = 'response')
+
+#confusion matrix
+table(spotify3$target, predict > 0.5)
+
+#Source for Method 3 :https://www.analyticsvidhya.com/blog/2015/11/beginners-guide-on-logistic-regression-in-r/
 
 
+
+
+
+#IGNORE BELOW##
 #Run k-fold #edit here
 set.seed(123)
 library(boot)
